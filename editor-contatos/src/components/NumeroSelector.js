@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { 
+import {
   TextField,
   Box,
   CircularProgress,
@@ -37,30 +37,39 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
       try {
         setLoading(true);
         setError(null);
-        
-        // 1. Busca todos os blocos do celular
+
         const blocosCollection = collection(db, `contatos/${bandeira}/celulares/${celular}/blocos`);
         const blocosSnapshot = await getDocs(blocosCollection);
-        
-        // 2. Para cada bloco, busca os documentos (que contêm os códigos)
+
         const codigosPromises = blocosSnapshot.docs.map(async (blocoDoc) => {
-          const docsCollection = collection(
-            db, 
-            `contatos/${bandeira}/celulares/${celular}/blocos/${blocoDoc.id}/docs`
-          );
-          const docsSnapshot = await getDocs(docsCollection);
-          
-          return docsSnapshot.docs.map(doc => ({
-            id: doc.id, // ID do documento
-            bloco: blocoDoc.id, // Nome do bloco
-            codigo: doc.data().CÓDIGO || doc.id, // Usa o campo CÓDIGO ou o ID como fallback
-            ...doc.data() // Todos os outros campos do documento
-          }));
+          const blocoRef = doc(db, `contatos/${bandeira}/celulares/${celular}/blocos/${blocoDoc.id}`);
+          const blocoSnap = await getDoc(blocoRef);
+          const blocoData = blocoSnap.data();
+
+          if (!blocoData) return [];
+
+          return Object.entries(blocoData).map(([codigoId, rawData]) => {
+            let data;
+
+            try {
+              data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+            } catch (e) {
+              console.error(`Erro ao fazer parse do código ${codigoId}:`, rawData);
+              data = {};
+            }
+
+            return {
+              id: codigoId,
+              bloco: blocoDoc.id,
+              codigo: data.CÓDIGO || codigoId,
+              ...data
+            };
+          });
         });
 
         const codigosArrays = await Promise.all(codigosPromises);
         const allCodigos = codigosArrays.flat();
-        
+
         setCodigos(allCodigos);
         setFilteredCodigos(allCodigos);
       } catch (err) {
@@ -79,7 +88,7 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
       setFilteredCodigos(codigos);
     } else {
       const term = searchTerm.toLowerCase();
-      const filtered = codigos.filter(item => 
+      const filtered = codigos.filter(item =>
         (item.codigo && item.codigo.toLowerCase().includes(term)) ||
         (item.NOME && item.NOME.toLowerCase().includes(term)) ||
         (item['NOME COMPLETO'] && item['NOME COMPLETO'].toLowerCase().includes(term)) ||
@@ -100,15 +109,13 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
   };
 
   const handleCodigoToggle = (codigo) => {
-    const currentIndex = selectedCodigos.findIndex(c => c.id === codigo.id);
-    const newSelected = [...selectedCodigos];
-
-    if (currentIndex === -1) {
-      newSelected.push(codigo);
+    const exists = selectedCodigos.some(c => c.id === codigo.id && c.bloco === codigo.bloco);
+    let newSelected;
+    if (exists) {
+      newSelected = selectedCodigos.filter(c => !(c.id === codigo.id && c.bloco === codigo.bloco));
     } else {
-      newSelected.splice(currentIndex, 1);
+      newSelected = [...selectedCodigos, codigo];
     }
-
     setSelectedCodigos(newSelected);
     onNumerosSelecionados(newSelected);
   };
@@ -121,7 +128,6 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
   return (
     <Box sx={{ mt: 3 }}>
       <Stack spacing={2}>
-        {/* Barra de busca */}
         <TextField
           fullWidth
           variant="outlined"
@@ -134,24 +140,23 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
           disabled={loading || !celular}
         />
 
-        {/* Controles de seleção */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="subtitle2">
             {filteredCodigos.length} códigos encontrados
           </Typography>
-          
+
           <Box>
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               onClick={handleSelectAll}
               disabled={filteredCodigos.length === 0}
               startIcon={<Check />}
             >
               {selectedCodigos.length === filteredCodigos.length ? 'Desmarcar todos' : 'Marcar todos'}
             </Button>
-            
-            <Button 
-              size="small" 
+
+            <Button
+              size="small"
               onClick={handleClearSelection}
               disabled={selectedCodigos.length === 0}
               startIcon={<Close />}
@@ -162,7 +167,6 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
           </Box>
         </Box>
 
-        {/* Lista de códigos */}
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
@@ -170,14 +174,14 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
         ) : error ? (
           <Typography color="error">{error}</Typography>
         ) : (
-          <List dense sx={{ 
-            maxHeight: 400, 
+          <List dense sx={{
+            maxHeight: 400,
             overflow: 'auto',
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: 1
           }}>
             {filteredCodigos.map(item => (
-              <ListItem 
+              <ListItem
                 key={`${item.bloco}-${item.id}`}
                 sx={{
                   '&:hover': {
@@ -187,7 +191,7 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
                 secondaryAction={
                   <Checkbox
                     edge="end"
-                    checked={selectedCodigos.some(c => c.id === item.id)}
+                    checked={selectedCodigos.some(c => c.id === item.id && c.bloco === item.bloco)}
                     onChange={() => handleCodigoToggle(item)}
                   />
                 }
@@ -198,9 +202,9 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
                       <Typography variant="body1" fontWeight="medium">
                         {item.codigo}
                       </Typography>
-                      <Chip 
-                        label={`Bloco: ${item.bloco}`} 
-                        size="small" 
+                      <Chip
+                        label={`Bloco: ${item.bloco}`}
+                        size="small"
                         color="secondary"
                       />
                     </Box>
@@ -223,10 +227,9 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
           </List>
         )}
 
-        {/* Resumo da seleção */}
         {selectedCodigos.length > 0 && (
-          <Box sx={{ 
-            p: 2, 
+          <Box sx={{
+            p: 2,
             border: `1px solid ${theme.palette.success.light}`,
             borderRadius: 1,
             backgroundColor: theme.palette.success.light + '08'
@@ -237,7 +240,7 @@ const NumeroSelector = ({ bandeira, celular, onNumerosSelecionados }) => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {selectedCodigos.slice(0, 5).map(item => (
                 <Chip
-                  key={item.id}
+                  key={`${item.bloco}-${item.id}`}
                   label={item.codigo}
                   onDelete={() => handleCodigoToggle(item)}
                   size="small"
