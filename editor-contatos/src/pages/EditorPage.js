@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react'; // Adicionei o useEffect aqui
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Container,
@@ -11,8 +11,7 @@ import {
   useTheme
 } from '@mui/material';
 import CelularSelector from '../components/CelularSelector';
-import BlocoSelector from '../components/BlocoSelector';
-import ContatosList from '../components/ContatosList';
+import NumeroSelector from '../components/NumeroSelector';
 import StatusEditor from '../components/StatusEditor';
 
 const EditorPage = () => {
@@ -21,9 +20,7 @@ const EditorPage = () => {
   const theme = useTheme();
   const [bandeira, setBandeira] = useState(location.state?.bandeira || null);
   const [celular, setCelular] = useState(null);
-  const [blocos, setBlocos] = useState([]);
   const [contatosSelecionados, setContatosSelecionados] = useState([]);
-  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!bandeira) {
@@ -33,22 +30,10 @@ const EditorPage = () => {
 
   const handleCelularSelect = (value) => {
     setCelular(value);
-    setBlocos([]);
     setContatosSelecionados([]);
-  };
-
-  const handleBlocosSelect = (selectedBlocos) => {
-    setBlocos(selectedBlocos);
-    setContatosSelecionados([]);
-  };
-
-  const handleContatosSelect = (selectedContatos) => {
-    setContatosSelecionados(selectedContatos);
   };
 
   const handleUpdateSuccess = () => {
-    // Forçar recarregamento dos contatos após atualização
-    setRefreshKey(prevKey => prevKey + 1);
     setContatosSelecionados([]);
   };
 
@@ -89,13 +74,15 @@ const EditorPage = () => {
             />
           </Box>
           
-          <Box sx={{ marginBottom: '20px' }}>
-            <BlocoSelector 
-              bandeira={bandeira} 
-              celular={celular} 
-              onBlocosSelect={handleBlocosSelect} 
-            />
-          </Box>
+          {celular && (
+            <Box sx={{ marginBottom: '20px' }}>
+              <NumeroSelector 
+                bandeira={bandeira}
+                celular={celular}
+                onNumerosSelecionados={setContatosSelecionados}
+              />
+            </Box>
+          )}
           
           <Box>
             <Button 
@@ -110,7 +97,7 @@ const EditorPage = () => {
         </Grid>
         
         <Grid item xs={12} md={8}>
-          {celular && blocos.length > 0 && (
+          {celular && contatosSelecionados.length > 0 && (
             <StatusEditor 
               bandeira={bandeira} 
               celular={celular} 
@@ -118,16 +105,6 @@ const EditorPage = () => {
               onUpdateSuccess={handleUpdateSuccess}
             />
           )}
-          
-          <Box sx={{ marginTop: '20px' }}>
-            <ContatosList 
-              key={refreshKey}
-              bandeira={bandeira} 
-              celular={celular} 
-              blocos={blocos} 
-              onContatosSelect={handleContatosSelect} 
-            />
-          </Box>
         </Grid>
       </Grid>
     </Container>
